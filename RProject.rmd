@@ -1,10 +1,12 @@
 ---
 title: "BIOS 6640 R Project - Fall 2018"
 author: "Robert J Suss"
-date: "October 25, 2018"
+date: "October 26, 2018"
 output:
   html_document:
     df_print: paged
+  pdf_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -12,6 +14,9 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+
+##Code and file available at https://github.com/rjsuss/RProj
+
 MozData <- read.csv("./MozSyntheticMalaria.csv")
 
 library(dplyr)
@@ -42,6 +47,8 @@ MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(tavg_lag6=lag(tavg, 6))
 MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(tavg_lag8=lag(tavg, 8))
 
 MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(tavg_lag10=lag(tavg, 10))
+
+MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(sd_lag4=lag(sd, 4)) 
 
 MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(sd_lag8=lag(sd, 8)) 
 
@@ -91,8 +98,7 @@ rlag2 <- ggplot(data = MozTbl2) +
   geom_smooth(mapping = aes(x = Epiweek, y = sqrt(rainTot_lag2)), color="steelblue") +
   facet_wrap(~ Region, nrow=2) +
   scale_y_continuous(sec.axis = sec_axis(~.*2, name = "Total Rainfall/Wk (mm), 2 week lag")) +
-  labs(x = "Week", y = "Cases per 1,000 Under 5")+
-  theme(legend.position="right")
+  labs(x = "Week", y = "Cases per 1,000 Under 5")
 
 rlag4 <- ggplot(data = MozTbl2) + 
   geom_smooth(mapping = aes(x = Epiweek, y = cpt), color="orange") +
@@ -133,7 +139,14 @@ tlag10 <- ggplot(data = MozTbl2) +
   scale_y_continuous(sec.axis = sec_axis(~.*2, name = "Average Temperature (C), 10 week lag")) +
   labs(x = "Week", y = "Cases per 1,000 Under 5")
 
-##Barometric Pressure lag
+##Barometric Pressure lags
+sdlag4 <- ggplot(data = MozTbl2) + 
+  geom_smooth(mapping = aes(x = Epiweek, y = cpt), color="orange") +
+  geom_smooth(mapping = aes(x = Epiweek, y = sd_lag4), color="slategray4") +
+  facet_wrap(~ Region, nrow=2) +
+  scale_y_continuous(sec.axis = sec_axis(~.*2, name = "Saturation Vapor Pressure (mmHg), 4 week lag")) +
+  labs(x = "Week", y = "Cases per 1,000 Under 5")
+
 sdlag8 <- ggplot(data = MozTbl2) + 
   geom_smooth(mapping = aes(x = Epiweek, y = cpt), color="orange") +
   geom_smooth(mapping = aes(x = Epiweek, y = sd_lag8), color="slategray4") +
@@ -241,10 +254,6 @@ temp_by_year <- spplot(shapeData, c(15:21),
                         col.regions=tempCol, 
                         col = "transparent", 
                         cuts=5)
-
-ggplot(data = MozTbl2) +
-  geom_point(mapping = aes(x = rainTot_lag4, y = cpt, color = Region)) +
-  geom_smooth(mapping = aes(x = rainTot_lag4, y = cpt, color = Region))
 ```
 
 
