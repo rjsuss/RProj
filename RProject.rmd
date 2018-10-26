@@ -1,0 +1,253 @@
+---
+title: "BIOS 6640 R Project - Fall 2018"
+author: "Robert J Suss"
+date: "October 25, 2018"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+MozData <- read.csv("./MozSyntheticMalaria.csv")
+
+library(dplyr)
+library(ggplot2)
+
+#get cases per thousand
+
+MozData$Popu5 <- MozData$Population_UN*MozData$u5weight
+MozData$cpt <- (MozData$malaria/MozData$Popu5)*1000
+
+MozTbl <- as_tibble(MozData)
+#remove incomplete data 2017
+MozTbl <- subset(MozData, Epiyear < 2017)
+
+#create lagged variables for each district
+MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(rainTot_lag2=lag(rainTot, 2))   
+
+MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(rainTot_lag4=lag(rainTot, 4))
+
+MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(rainTot_lag8=lag(rainTot, 8))
+
+MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(tavg_lag2=lag(tavg, 2))   
+
+MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(tavg_lag4=lag(tavg, 4))
+
+MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(tavg_lag6=lag(tavg, 6))
+
+MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(tavg_lag8=lag(tavg, 8))
+
+MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(tavg_lag10=lag(tavg, 10))
+
+MozTbl <- MozTbl %>% group_by(DISTCODE) %>% mutate(sd_lag8=lag(sd, 8)) 
+
+library(lattice)
+library(latticeExtra)
+library(rgdal)
+
+library(sp)
+library(maptools) 
+
+#Explore inicidence and weather variables
+summary(MozTbl$rainTot)
+
+#rainfall appears very skewed. Create a histogram.
+rain_hist <- histogram(MozTbl$rainTot)
+
+#Also look at relative humidity
+rh_hist <- histogram(MozTbl$rh, xlab="Relative Humidity (%)", col="seagreen")
+
+#histogram with log(rainTot)
+lrain_hist <- histogram(log(MozTbl$rainTot), xlab="(log) Total Rainfall")
+
+weath_tbl <- MozTbl %>% group_by(Region) %>% 
+  summarise(
+  rainm = round(mean(rainTot, na.rm = TRUE),2),
+  rainTot = round(sum(rainTot, na.rm = TRUE),2),
+  tavgm = round(mean(tavg, na.rm = TRUE),1),
+  rh = mean(rh, na.rm = TRUE),1)
+colnames(weath_tbl) <- c("Region", "Average Rainfall", "Total Rainfall", "Average Temperature", "Average Relative Humidity")
+
+weath_tbl
+
+```
+
+##Exploratory - Tables, Graphs
+```{r}
+#Examine patterns by province in rainfall, temperature, cpt, humidity
+by_region <- group_by(MozTbl, Region)
+by_district <- group_by(MozTbl, DISTCODE)
+
+MozTbl2 <- na.omit(MozTbl)
+
+#Rain with 2, 4, and 8 week lags:  take square root of rain totals to better visualize
+
+rlag2 <- ggplot(data = MozTbl2) + 
+  geom_smooth(mapping = aes(x = Epiweek, y = cpt), color="orange") +
+  geom_smooth(mapping = aes(x = Epiweek, y = sqrt(rainTot_lag2)), color="steelblue") +
+  facet_wrap(~ Region, nrow=2) +
+  scale_y_continuous(sec.axis = sec_axis(~.*2, name = "Total Rainfall/Wk (mm), 2 week lag")) +
+  labs(x = "Week", y = "Cases per 1,000 Under 5")+
+  theme(legend.position="right")
+
+rlag4 <- ggplot(data = MozTbl2) + 
+  geom_smooth(mapping = aes(x = Epiweek, y = cpt), color="orange") +
+  geom_smooth(mapping = aes(x = Epiweek, y = sqrt(rainTot_lag4)), color="steelblue") +
+  facet_wrap(~ Region, nrow=2) +
+  scale_y_continuous(sec.axis = sec_axis(~.*2, name = "Total Rainfall/Wk (mm), 4 week lag")) +
+  labs(x = "Week", y = "Cases per 1,000 Under 5")
+
+rlag8 <- ggplot(data = MozTbl2) + 
+  geom_smooth(mapping = aes(x = Epiweek, y = cpt), color="orange") +
+  geom_smooth(mapping = aes(x = Epiweek, y = sqrt(rainTot_lag8)), color="steelblue") +
+  facet_wrap(~ Region, nrow=2) +
+  scale_y_continuous(sec.axis = sec_axis(~.*2, name = "Total Rainfall/Wk (mm), 8 week lag")) +
+  labs(x = "Week", y = "Cases per 1,000 Under 5")
+
+
+#Temperature lags
+##Longer lags appeared more accurate for rainfall - try 6, 8, 10 with temp.
+tlag6 <- ggplot(data = MozTbl2) + 
+  geom_smooth(mapping = aes(x = Epiweek, y = cpt), color="orange") +
+  geom_smooth(mapping = aes(x = Epiweek, y = tavg_lag6), color="plum") +
+  facet_wrap(~ Region, nrow=2) +
+  scale_y_continuous(sec.axis = sec_axis(~.*2, name = "Average Temperature (C), 6 week lag")) +
+  labs(x = "Week", y = "Cases per 1,000 Under 5")
+
+tlag8 <- ggplot(data = MozTbl2) + 
+  geom_smooth(mapping = aes(x = Epiweek, y = cpt), color="orange") +
+  geom_smooth(mapping = aes(x = Epiweek, y = tavg_lag8), color="plum") +
+  facet_wrap(~ Region, nrow=2) +
+  scale_y_continuous(sec.axis = sec_axis(~.*2, name = "Average Temperature (C), 8 week lag")) +
+  labs(x = "Week", y = "Cases per 1,000 Under 5")
+
+
+tlag10 <- ggplot(data = MozTbl2) + 
+  geom_smooth(mapping = aes(x = Epiweek, y = cpt), color="orange") +
+  geom_smooth(mapping = aes(x = Epiweek, y = tavg_lag10), color="plum") +
+  facet_wrap(~ Region, nrow=2) +
+  scale_y_continuous(sec.axis = sec_axis(~.*2, name = "Average Temperature (C), 10 week lag")) +
+  labs(x = "Week", y = "Cases per 1,000 Under 5")
+
+##Barometric Pressure lag
+sdlag8 <- ggplot(data = MozTbl2) + 
+  geom_smooth(mapping = aes(x = Epiweek, y = cpt), color="orange") +
+  geom_smooth(mapping = aes(x = Epiweek, y = sd_lag8), color="slategray4") +
+  facet_wrap(~ Region, nrow=2) +
+  scale_y_continuous(sec.axis = sec_axis(~.*2, name = "Saturation Vapor Pressure (mmHg), 8 week lag")) +
+  labs(x = "Week", y = "Cases per 1,000 Under 5")
+
+rain_summary <- summarize(by_region, sum(rainTot), mean(rainTot))
+colnames(rain_summary) <- c("Region", "Total Rainfall, 2010-2016", "Average Rainfall, 2010-2016")
+
+tavg_summary <- summarize(by_region, mean(tavg))
+colnames(tavg_summary) <- c("Region", "Average Temperature")
+
+summary(MozTbl$tavg)
+hist(MozTbl$tavg)
+
+rain_summary
+#A better picture of rainfall by region
+summary(subset(MozTbl$rainTot, MozTbl$Region=="Northern"))
+summary(subset(MozTbl$rainTot, MozTbl$Region=="Coastal"))
+summary(subset(MozTbl$rainTot, MozTbl$Region=="Center"))
+summary(subset(MozTbl$rainTot, MozTbl$Region=="Southern"))
+
+tavg_summary
+
+```
+
+###Maps
+```{r}
+#shapefile for mapping - check for matched codes
+Moz_shape = readOGR(dsn = "./data", layer = "Moz_admin2")
+Moz_shape@data
+unique(MozTbl$DISTCODE)
+
+##aggregate yearly rainfall by district (2010-2016)
+rain_agg <- as.data.frame(tapply(MozTbl$rainTot, list(MozTbl$DISTCODE, MozTbl$Epiyear), sum))
+
+#rain_agg <- na.omit(rainAggYr)
+
+colnames(rain_agg) <- paste("rainagg", 10:16, sep="_")
+
+#Average annual temperature by district
+temp_avg <- as.data.frame(tapply(MozTbl$tavg, list(MozTbl$DISTCODE, MozTbl$Epiyear), mean))
+
+#temp_avg <- na.omit(tempAvgs)
+colnames(temp_avg) <- paste("tavg", 10:16, sep="_")
+
+##malaria cases under 5 annual incidence
+case_agg <- as.data.frame(tapply(MozTbl$malaria, list(MozTbl$DISTCODE, MozTbl$Epiyear), sum))
+
+
+#cptAgg <- na.omit(cptAgg)
+
+colnames(case_agg) <- paste("cpt", 10:16, sep="_")
+
+#combine all variables into a dataframe
+allData <- as.data.frame(cbind(rain_agg, temp_avg, case_agg))
+
+#combine shapefile and dataframe
+
+shapeData <- SpatialPolygonsDataFrame(Moz_shape, allData, match.ID=F)
+
+library(RColorBrewer)
+rainCol <- brewer.pal(n=8, name = "YlGnBu")
+tempCol <- brewer.pal(n=6, name = "YlOrRd")
+caseCol <- brewer.pal(n=6, name="PuRd")
+
+#Create maps for aggregated values of temperature, rainfall and cpt
+##Rain for all years
+rainMap <- spplot(shapeData, c(1:7),  
+      names.attr = c("2010", "2011", "2012", "2013", "2014", "2015", "2016"),
+      colorkey=list(space="right"), scales = list(draw=T), 
+      main = "Annual Rainfall by District (mm), 2010-2016", 
+      as.table = T, 
+      col.regions = rainCol, col = "transparent", 
+      cuts=7)
+
+##Average Rain for all years
+rainAvg<- spplot(shapeData, c(8:14),  
+      colorkey=list(space="right"), 
+      names.attr = c("2010", "2011", "2012", "2013", "2014", "2015", "2016"),
+      main = "Average Annual Rainfall by District (mm)", 
+      as.table = T, 
+      col.regions = rainCol, col = "transparent", 
+      cuts=7)
+
+##Incidence, cumulative
+cases_cumul <- spplot(shapeData, c(15:21), 
+                  names.attr = c("2010", "2011", "2012", "2013", "2014", "2015", "2016"),
+                  colorkey=list(space="right"), 
+                  scales =list(draw=T), 
+                  main = "Annual Malaria Incidence Under 5, 2010-2016", 
+                  as.table=T, 
+                  col.regions=caseCol, 
+                  col = "transparent", 
+                  cuts=6)
+
+##Average annual temperature
+
+temp_by_year <- spplot(shapeData, c(15:21),
+                       names.attr = c("2010", "2011", "2012", "2013", "2014", "2015", "2016"),
+                        colorkey=list(space="right"), 
+                        main = "Average Annual Temperature, 2010-2016", 
+                        as.table=T, 
+                        col.regions=tempCol, 
+                        col = "transparent", 
+                        cuts=5)
+
+ggplot(data = MozTbl2) +
+  geom_point(mapping = aes(x = rainTot_lag4, y = cpt, color = Region)) +
+  geom_smooth(mapping = aes(x = rainTot_lag4, y = cpt, color = Region))
+```
+
+
+
+
+
